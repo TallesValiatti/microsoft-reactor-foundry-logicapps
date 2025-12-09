@@ -17,7 +17,6 @@ public class AgentService(IConfiguration configuration)
     
     private AIProjectClient? _projectClient;
     private OpenAIResponseClient? _responseClient;
-    private readonly ConcurrentDictionary<string, string> _conversations = new();
 
     public async Task InitializeAgent()
     {
@@ -66,8 +65,6 @@ public class AgentService(IConfiguration configuration)
         var conversation = await openAiClient.Conversations.CreateProjectConversationAsync();
         var conversationId = conversation.Value.Id;
         
-        _conversations.TryAdd(conversationId, conversationId);
-        
         return conversationId;
     }
 
@@ -75,10 +72,7 @@ public class AgentService(IConfiguration configuration)
     {
         if (_projectClient == null || _responseClient == null)
             throw new InvalidOperationException("Agent not initialized");
-
-        if (!_conversations.ContainsKey(conversationId))
-            throw new InvalidOperationException("Conversation not found");
-
+        
         var agent = await _projectClient.Agents.GetAgentAsync(_agentName);
         
         var responseClient = _projectClient.OpenAI.GetProjectResponsesClientForAgent(

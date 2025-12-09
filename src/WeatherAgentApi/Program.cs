@@ -1,5 +1,4 @@
 using Microsoft.AspNetCore.Mvc;
-using WeatherAgentApi;
 using WeatherAgentApi.Services;
 
 #pragma warning disable OPENAI001
