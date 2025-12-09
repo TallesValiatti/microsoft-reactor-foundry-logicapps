@@ -8,12 +8,12 @@ using OpenAI.Responses;
 namespace WeatherAgentApi.Services;
 
 [Experimental("OPENAI001")]
-public class AgentService
+public class AgentService(IConfiguration configuration)
 {
-    private readonly string _url = "https://msft-foundry-reactor.services.ai.azure.com/api/projects/proj-default";
-    private readonly string _agentName = "weather-agent-reactor";
-    private readonly string _model = "gpt-5-mini";
-    private readonly string _connectionName = "LogicApps_Tool_Connection_logicappweather_9961";
+    private readonly string _url = configuration["AzureAi:Url"] ?? throw new ArgumentNullException($"AzureAi:Url");
+    private readonly string _agentName = configuration["AzureAi:AgentName"] ?? throw new ArgumentNullException($"AzureAi:AgentName");
+    private readonly string _model = configuration["AzureAi:Model"] ?? throw new ArgumentNullException($"AzureAi:Model");
+    private readonly string _connectionName = configuration["AzureAi:ConnectionName"] ?? throw new ArgumentNullException($"AzureAi:ConnectionName");
     
     private AIProjectClient? _projectClient;
     private OpenAIResponseClient? _responseClient;
