@@ -5,14 +5,12 @@ using ConsoleApp;
 using OpenAI.Responses;
 #pragma warning disable OPENAI001
 
-var url = "https://foundry-power-gpt-dev-westus.services.ai.azure.com/api/projects/firstProject";
-var newAgent = "MyFirstAgent2";
-var model = "gpt-4.1-mini";
+var url = "https://msft-foundry-reactor.services.ai.azure.com/api/projects/proj-default";
+var newAgent = "weather-agent-reactor";
+var model = "gpt-5-mini";
+var connectionName = "LogicApps_Tool_Connection_logicappweather_9961";
 
-
-AIProjectClient projectClient = new(new Uri(url), new AzureCliCredential());
-
-var connectionName = "logic-app-teste2";
+AIProjectClient projectClient = new(new Uri(url), new AzureCliCredential()); 
 
 var connectionResults = projectClient.Connections.GetConnectionsAsync();
 
