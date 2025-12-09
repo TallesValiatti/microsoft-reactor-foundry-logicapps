@@ -1,0 +1,1 @@
+public record MessageRequest(string Message);

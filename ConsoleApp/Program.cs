@@ -38,7 +38,7 @@ var openApiFunction = ProjectsOpenAIModelFactory.OpenAPIFunctionDefinition(
     Constants.OpenApiToolDescription,    // used by the model to choose the tool
     BinaryData.FromString(Constants.OpenApiToolSpec),
     auth: auth,
-    defaultParams: new[] { "api-version" }            // optional: parameters that will be filled by defaults
+    defaultParams: ["api-version"] // optional: parameters that will be filled by defaults
 );
 
 // Turn that function into an AgentTool

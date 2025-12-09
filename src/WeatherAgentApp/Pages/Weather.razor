@@ -1,0 +1,919 @@
+﻿@page "/chat"
+@using System.Net.Http.Json
+@inject HttpClient Http
+@inject IJSRuntime JS
+
+<PageTitle>Weather Agent Chat</PageTitle>
+
+<div class="chat-container">
+    <div class="chat-header">
+        <div class="header-content">
+            <h1>🤖 Weather Agent Assistant</h1>
+            <div class="status-badge @(GetStatusClass())">
+                @GetStatusText()
+            </div>
+        </div>
+        @if (isInitialized && !string.IsNullOrEmpty(conversationId))
+        {
+            <div class="conversation-info">
+                <small>Conversa ID: @conversationId?.Substring(0, 8)...</small>
+            </div>
+        }
+    </div>
+
+    <div class="chat-body">
+        @if (!isInitialized)
+        {
+            <div class="welcome-screen">
+                <div class="welcome-card">
+                    <div class="welcome-icon">🌤️</div>
+                    <h2>Bem-vindo ao Weather Agent</h2>
+                    <p>Seu assistente inteligente para informações meteorológicas</p>
+                    <button class="btn-primary" @onclick="InitializeAgent" disabled="@isLoading">
+                        @if (isLoading)
+                        {
+                            <span class="spinner"></span>
+                        }
+                        Iniciar Agente
+                    </button>
+                </div>
+            </div>
+        }
+        else if (string.IsNullOrEmpty(conversationId))
+        {
+            <div class="welcome-screen">
+                <div class="welcome-card">
+                    <div class="success-icon">✅</div>
+                    <h2>Agente Pronto!</h2>
+                    <p>Vamos começar uma nova conversa?</p>
+                    <button class="btn-success" @onclick="CreateConversation" disabled="@isLoading">
+                        @if (isLoading)
+                        {
+                            <span class="spinner"></span>
+                        }
+                        Nova Conversa
+                    </button>
+                </div>
+            </div>
+        }
+        else
+        {
+            <div class="messages-container" @ref="messagesContainer">
+                @if (messages.Count == 0)
+                {
+                    <div class="empty-chat">
+                        <div class="empty-icon">💬</div>
+                        <p>Nenhuma mensagem ainda. Comece perguntando sobre o tempo!</p>
+                        <div class="suggestions-inline">
+                            <button class="suggestion-chip" @onclick='() => SetAndSendMessage("Qual o tempo em Buenos Aires?")'>
+                                🇦🇷 Buenos Aires
+                            </button>
+                            <button class="suggestion-chip" @onclick='() => SetAndSendMessage("Como está o clima em São Paulo?")'>
+                                🇧🇷 São Paulo
+                            </button>
+                        </div>
+                    </div>
+                }
+                else
+                {
+                    @foreach (var msg in messages)
+                    {
+                        <div class="message @(msg.IsUser ? "user-message" : "agent-message")">
+                            <div class="message-avatar">
+                                @(msg.IsUser ? "👤" : "🤖")
+                            </div>
+                            <div class="message-content">
+                                <div class="message-header">
+                                    <span class="message-author">@(msg.IsUser ? "Você" : "Weather Agent")</span>
+                                    <span class="message-time">@msg.Timestamp.ToString("HH:mm")</span>
+                                </div>
+                                <div class="message-text">@msg.Content</div>
+                            </div>
+                        </div>
+                    }
+                    
+                    @if (isTyping)
+                    {
+                        <div class="message agent-message">
+                            <div class="message-avatar">🤖</div>
+                            <div class="message-content">
+                                <div class="typing-indicator">
+                                    <span></span>
+                                    <span></span>
+                                    <span></span>
+                                </div>
+                            </div>
+                        </div>
+                    }
+                }
+            </div>
+
+            <div class="chat-input-container">
+                <div class="input-wrapper">
+                    <input type="text" 
+                           class="chat-input" 
+                           placeholder="Digite sua pergunta sobre o tempo..." 
+                           @bind="currentMessage"
+                           @bind:event="oninput"
+                           @onkeypress="HandleKeyPress"
+                           disabled="@isLoading" />
+                    <button class="btn-send" @onclick="SendMessage" disabled="@(isLoading || string.IsNullOrWhiteSpace(currentMessage))">
+                        @if (isLoading)
+                        {
+                            <span class="spinner-small"></span>
+                        }
+                        else
+                        {
+                            <span>📤</span>
+                        }
+                    </button>
+                </div>
+                <div class="input-actions">
+                    <button class="btn-icon" @onclick="ClearChat" title="Limpar chat">
+                        🗑️
+                    </button>
+                    <button class="btn-icon" @onclick="LoadHistory" disabled="@isLoading" title="Carregar histórico">
+                        📜
+                    </button>
+                    <button class="btn-icon" @onclick="StartNewConversation" disabled="@isLoading" title="Nova conversa">
+                        ➕
+                    </button>
+                </div>
+            </div>
+        }
+    </div>
+
+    @if (!string.IsNullOrEmpty(errorMessage))
+    {
+        <div class="error-toast">
+            <span class="error-icon">⚠️</span>
+            <span class="error-text">@errorMessage</span>
+            <button class="error-close" @onclick="ClearError">✕</button>
+        </div>
+    }
+</div>
+
+<style>
+    * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+    }
+
+    html, body {
+        height: 100%;
+        overflow: hidden;
+    }
+
+    .chat-container {
+        display: flex;
+        flex-direction: column;
+        height: 100vh;
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        overflow: hidden;  /* Garante nenhum scroll externo */
+    }
+
+    .chat-header {
+        flex-shrink: 0;
+        background: rgba(255, 255, 255, 0.95);
+        backdrop-filter: blur(10px);
+        padding: 1rem 1.5rem;
+        box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        z-index: 10;
+    }
+
+    .header-content {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        max-width: 1200px;
+        margin: 0 auto;
+    }
+
+    .chat-header h1 {
+        font-size: 1.5rem;
+        color: #333;
+        font-weight: 700;
+        margin: 0;
+    }
+
+    .status-badge {
+        padding: 0.5rem 1rem;
+        border-radius: 20px;
+        font-size: 0.85rem;
+        font-weight: 600;
+    }
+
+    .status-inactive {
+        background: #e0e0e0;
+        color: #666;
+    }
+
+    .status-ready {
+        background: #4caf50;
+        color: white;
+    }
+
+    .status-active {
+        background: #2196f3;
+        color: white;
+    }
+
+    .conversation-info {
+        margin-top: 0.5rem;
+        color: #666;
+        font-size: 0.85rem;
+    }
+
+    .chat-body {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        max-width: 1200px;
+        width: 100%;
+        margin: 0 auto;
+        overflow: hidden;  /* Previne overflow no body, mas scroll interno no messages */
+    }
+
+    .welcome-screen {
+        flex: 1;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 2rem;
+        overflow: hidden;
+    }
+
+    .welcome-card {
+        background: white;
+        border-radius: 20px;
+        padding: 3rem;
+        text-align: center;
+        box-shadow: 0 10px 40px rgba(0,0,0,0.2);
+        max-width: 500px;
+    }
+
+    .welcome-icon, .success-icon, .empty-icon {
+        font-size: 4rem;
+        margin-bottom: 1rem;
+    }
+
+    .welcome-card h2 {
+        color: #333;
+        margin-bottom: 1rem;
+        font-size: 2rem;
+    }
+
+    .welcome-card p {
+        color: #666;
+        margin-bottom: 2rem;
+        font-size: 1.1rem;
+    }
+
+    .messages-container {
+        flex: 1;
+        overflow-y: auto;
+        padding: 1.5rem;
+        background: rgba(255, 255, 255, 0.9);
+        margin: 0 1rem 0 1rem;  /* Mantém mesma largura visual que sugestões e input */
+        border-radius: 0;  /* Removido arredondados para evitar gaps */
+        box-shadow: none;  /* Simplificado */
+        min-height: 0;
+        -webkit-overflow-scrolling: touch;
+        /* Espaço extra para que nada fique escondido atrás do footer/input */
+        padding-bottom: 200px;
+    }
+
+    .empty-chat {
+        text-align: center;
+        padding: 3rem;
+        color: #666;
+    }
+
+    .suggestions-inline {
+        display: flex;
+        gap: 0.5rem;
+        justify-content: center;
+        margin-top: 1.5rem;
+        flex-wrap: wrap;
+    }
+
+    .message {
+        display: flex;
+        gap: 1rem;
+        margin-bottom: 1.5rem;
+        animation: fadeIn 0.3s ease-in;
+    }
+
+    @@keyframes fadeIn {
+        from { opacity: 0; transform: translateY(10px); }
+        to { opacity: 1; transform: translateY(0); }
+    }
+
+    .user-message {
+        flex-direction: row-reverse;
+    }
+
+    .message-avatar {
+        width: 40px;
+        height: 40px;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 1.5rem;
+        flex-shrink: 0;
+        background: #f0f0f0;
+    }
+
+    .user-message .message-avatar {
+        background: #667eea;
+    }
+
+    .message-content {
+        max-width: 70%;
+        background: white;
+        padding: 1rem 1.5rem;
+        border-radius: 20px;
+        box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+    }
+
+    .user-message .message-content {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+    }
+
+    .message-header {
+        display: flex;
+        justify-content: space-between;
+        margin-bottom: 0.5rem;
+        font-size: 0.85rem;
+        opacity: 0.8;
+    }
+
+    .message-author {
+        font-weight: 600;
+    }
+
+    .message-text {
+        line-height: 1.6;
+        white-space: pre-wrap;
+        word-wrap: break-word;
+    }
+
+    .typing-indicator {
+        display: flex;
+        gap: 5px;
+        padding: 1rem;
+    }
+
+    .typing-indicator span {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        background: #667eea;
+        animation: bounce 1.4s infinite ease-in-out;
+    }
+
+    .typing-indicator span:nth-child(1) { animation-delay: -0.32s; }
+    .typing-indicator span:nth-child(2) { animation-delay: -0.16s; }
+
+    @@keyframes bounce {
+        0%, 80%, 100% { transform: scale(0); }
+        40% { transform: scale(1); }
+    }
+
+    .suggestions-bar {
+        flex-shrink: 0;
+        padding: 0.75rem 1.5rem;
+        background: rgba(255, 255, 255, 0.95);
+        backdrop-filter: blur(10px);
+        border-top: 1px solid rgba(0,0,0,0.05);
+        /* Alinha largura com o container de mensagens */
+        margin: 0 1rem;
+        /* Deixa fluido no fluxo, sem sobrepor o footer */
+        position: relative;
+        z-index: 5;
+    }
+
+    .suggestions-label {
+        font-size: 0.85rem;
+        color: #666;
+        margin-bottom: 0.5rem;
+        font-weight: 600;
+    }
+
+    .suggestions-scroll {
+        display: flex;
+        gap: 0.5rem;
+        overflow-x: auto;
+        padding-bottom: 0.5rem;
+    }
+
+    .suggestions-scroll::-webkit-scrollbar {
+        height: 4px;
+    }
+
+    .suggestions-scroll::-webkit-scrollbar-track {
+        background: #f1f1f1;
+        border-radius: 10px;
+    }
+
+    .suggestions-scroll::-webkit-scrollbar-thumb {
+        background: #667eea;
+        border-radius: 10px;
+    }
+
+    .suggestion-chip {
+        padding: 0.5rem 1rem;
+        background: white;
+        border: 2px solid #667eea;
+        border-radius: 20px;
+        cursor: pointer;
+        white-space: nowrap;
+        transition: all 0.3s ease;
+        font-size: 0.9rem;
+        color: #667eea;
+        font-weight: 600;
+    }
+
+    .suggestion-chip:hover {
+        background: #667eea;
+        color: white;
+        transform: translateY(-2px);
+        box-shadow: 0 4px 8px rgba(102, 126, 234, 0.3);
+    }
+
+    .chat-input-container {
+        flex-shrink: 0;
+        padding: 1rem 1.5rem 1.5rem 1.5rem;
+        background: rgba(255, 255, 255, 0.98);
+        backdrop-filter: blur(10px);
+        border-top: 1px solid rgba(0,0,0,0.1);
+        bottom: 0;
+        z-index: 10;
+        margin: 0 1rem 1rem 1rem;
+        border-radius: 12px;
+    }
+
+    .input-wrapper {
+        display: flex;
+        gap: 1rem;
+        margin-bottom: 0.75rem;
+    }
+
+    .chat-input {
+        flex: 1;
+        padding: 1rem 1.5rem;
+        border: 2px solid #e0e0e0;
+        border-radius: 25px;
+        font-size: 1rem;
+        transition: all 0.3s ease;
+        outline: none;
+    }
+
+    .chat-input:focus {
+        border-color: #667eea;
+        box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+    }
+
+    .btn-send {
+        width: 50px;
+        height: 50px;
+        border-radius: 50%;
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        border: none;
+        cursor: pointer;
+        transition: all 0.3s ease;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 1.3rem;
+    }
+
+    .btn-send:hover:not(:disabled) {
+        transform: scale(1.1);
+        box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
+    }
+
+    .btn-send:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+    }
+
+    .input-actions {
+        display: flex;
+        gap: 0.8rem;
+        justify-content: center;
+        flex-wrap: wrap;
+        min-height: 44px;
+    }
+
+    .btn-icon {
+        padding: 0.6rem 1rem;
+        font-size: 1.1rem;
+        background: #f8f9fa;
+        border: 2px solid #667eea;
+        border-radius: 20px;
+        cursor: pointer;
+        transition: all 0.3s ease;
+        color: #667eea;
+        font-weight: 500;
+    }
+
+    .btn-icon:hover:not(:disabled) {
+        background: #667eea;
+        color: white;
+        transform: translateY(-2px);
+        box-shadow: 0 4px 8px rgba(102, 126, 234, 0.3);
+    }
+
+    .btn-icon:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+    }
+
+    .btn-primary, .btn-success {
+        padding: 1rem 2rem;
+        border: none;
+        border-radius: 25px;
+        font-size: 1.1rem;
+        font-weight: 600;
+        cursor: pointer;
+        transition: all 0.3s ease;
+        display: inline-flex;
+        align-items: center;
+        gap: 0.5rem;
+    }
+
+    .btn-primary {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+    }
+
+    .btn-success {
+        background: linear-gradient(135deg, #4caf50 0%, #45a049 100%);
+        color: white;
+    }
+
+    .btn-primary:hover:not(:disabled), .btn-success:hover:not(:disabled) {
+        transform: translateY(-3px);
+        box-shadow: 0 10px 25px rgba(0,0,0,0.2);
+    }
+
+    .btn-primary:disabled, .btn-success:disabled {
+        opacity: 0.6;
+        cursor: not-allowed;
+    }
+
+    .spinner, .spinner-small {
+        border: 3px solid rgba(255,255,255,0.3);
+        border-radius: 50%;
+        border-top-color: white;
+        animation: spin 1s linear infinite;
+    }
+
+    .spinner {
+        width: 20px;
+        height: 20px;
+    }
+
+    .spinner-small {
+        width: 16px;
+        height: 16px;
+        border-width: 2px;
+    }
+
+    @@keyframes spin {
+        to { transform: rotate(360deg); }
+    }
+
+    .error-toast {
+        position: fixed;
+        bottom: 2rem;
+        right: 2rem;
+        background: #f44336;
+        color: white;
+        padding: 1rem 1.5rem;
+        border-radius: 10px;
+        box-shadow: 0 5px 20px rgba(244, 67, 54, 0.3);
+        display: flex;
+        align-items: center;
+        gap: 1rem;
+        animation: slideIn 0.3s ease-out;
+        z-index: 1000;
+    }
+
+    @@keyframes slideIn {
+        from { transform: translateX(400px); }
+        to { transform: translateX(0); }
+    }
+
+    .error-close {
+        background: none;
+        border: none;
+        color: white;
+        font-size: 1.2rem;
+        cursor: pointer;
+        padding: 0;
+        width: 24px;
+        height: 24px;
+    }
+
+    @@media (max-width: 768px) {
+    .chat-header h1 {
+        font-size: 1.3rem;
+    }
+
+    .message-content {
+        max-width: 85%;
+    }
+
+    .suggestions-bar {
+        padding: 1rem;
+        /* sem sticky em telas médias; mantemos alinhamento lateral */
+        margin: 0 1rem;
+    }
+
+    .chat-input-container {
+        padding: 1rem;
+    }
+
+    .error-toast {
+        left: 1rem;
+        right: 1rem;
+        bottom: 1rem;
+    }
+    }
+
+    @@media (max-width: 480px) {
+    .chat-header {
+        padding: 0.8rem 1rem;
+    }
+
+    .chat-header h1 {
+        font-size: 1.2rem;
+    }
+
+    .messages-container {
+        margin: 0.5rem 0.5rem 0 0.5rem;
+        padding: 1rem;
+    }
+
+    .suggestions-bar,
+    .chat-input-container {
+        padding: 0.8rem 1rem;
+        /* Alinha às margens menores do messages-container em telas pequenas */
+        margin: 0 0.5rem;
+    }
+    .chat-input-container { bottom: 0; }
+
+    .input-wrapper {
+        gap: 0.5rem;
+    }
+
+    .btn-send {
+        width: 45px;
+        height: 45px;
+    }
+
+    .btn-icon {
+        padding: 0.5rem;
+        font-size: 1.2rem;
+    }
+    }
+</style>
+
+@code {
+    private ElementReference messagesContainer;
+    private bool isInitialized = false;
+    private bool isLoading = false;
+    private bool isTyping = false;
+    private string? conversationId;
+    private string currentMessage = "";
+    private string errorMessage = "";
+    private List<ChatMessage> messages = new();
+    private string apiBaseUrl = "https://localhost:7222";
+
+    private string GetStatusClass()
+    {
+        if (!isInitialized) return "status-inactive";
+        if (string.IsNullOrEmpty(conversationId)) return "status-ready";
+        return "status-active";
+    }
+
+    private string GetStatusText()
+    {
+        if (!isInitialized) return "Inativo";
+        if (string.IsNullOrEmpty(conversationId)) return "Pronto";
+        return "Conversando";
+    }
+
+    private async Task InitializeAgent()
+    {
+        isLoading = true;
+        errorMessage = "";
+        
+        try
+        {
+            var response = await Http.PostAsync($"{apiBaseUrl}/api/agent/initialize", null);
+            
+            if (response.IsSuccessStatusCode)
+            {
+                isInitialized = true;
+                await Task.Delay(500);
+                await CreateConversation();
+            }
+            else
+            {
+                var error = await response.Content.ReadFromJsonAsync<ErrorResponse>();
+                errorMessage = error?.Error ?? "Erro ao inicializar agente";
+                AutoClearError();
+            }
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Erro de conexão: {ex.Message}";
+            AutoClearError();
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private async Task CreateConversation()
+    {
+        isLoading = true;
+        errorMessage = "";
+        
+        try
+        {
+            var response = await Http.PostAsync($"{apiBaseUrl}/api/conversations/create", null);
+            
+            if (response.IsSuccessStatusCode)
+            {
+                var result = await response.Content.ReadFromJsonAsync<ConversationResponse>();
+                conversationId = result?.ConversationId;
+            }
+            else
+            {
+                var error = await response.Content.ReadFromJsonAsync<ErrorResponse>();
+                errorMessage = error?.Error ?? "Erro ao criar conversa";
+                AutoClearError();
+            }
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Erro de conexão: {ex.Message}";
+            AutoClearError();
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private async Task SendMessage()
+    {
+        if (string.IsNullOrWhiteSpace(currentMessage) || string.IsNullOrEmpty(conversationId))
+            return;
+
+        var userMessage = currentMessage;
+        messages.Add(new ChatMessage(userMessage, true, DateTime.Now));
+        currentMessage = "";
+        isTyping = true;
+
+        StateHasChanged();
+        await ScrollToBottom();
+
+        try
+        {
+            var response = await Http.PostAsJsonAsync(
+                $"{apiBaseUrl}/api/conversations/{conversationId}/message",
+                new { Message = userMessage }
+            );
+
+            if (response.IsSuccessStatusCode)
+            {
+                var result = await response.Content.ReadFromJsonAsync<MessageResponse>();
+                if (result?.Response != null)
+                {
+                    await Task.Delay(500);
+                    messages.Add(new ChatMessage(result.Response, false, DateTime.Now));
+                    await ScrollToBottom();
+                }
+            }
+            else
+            {
+                var error = await response.Content.ReadFromJsonAsync<ErrorResponse>();
+                errorMessage = error?.Error ?? "Erro ao enviar mensagem";
+                AutoClearError();
+            }
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Erro de conexão: {ex.Message}";
+            AutoClearError();
+        }
+        finally
+        {
+            isTyping = false;
+        }
+    }
+
+    private async Task LoadHistory()
+    {
+        if (string.IsNullOrEmpty(conversationId))
+            return;
+
+        isLoading = true;
+        errorMessage = "";
+
+        try
+        {
+            var response = await Http.GetAsync($"{apiBaseUrl}/api/conversations/{conversationId}/history");
+            
+            if (response.IsSuccessStatusCode)
+            {
+                var history = await response.Content.ReadFromJsonAsync<List<HistoryItem>>();
+                // Processar histórico conforme necessário
+            }
+            else
+            {
+                var error = await response.Content.ReadFromJsonAsync<ErrorResponse>();
+                errorMessage = error?.Error ?? "Erro ao carregar histórico";
+                AutoClearError();
+            }
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Erro de conexão: {ex.Message}";
+            AutoClearError();
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private void ClearChat()
+    {
+        messages.Clear();
+        currentMessage = "";
+    }
+
+    private async Task StartNewConversation()
+    {
+        ClearChat();
+        await CreateConversation();
+    }
+
+    private void SetMessage(string message)
+    {
+        currentMessage = message;
+    }
+
+    private async Task SetAndSendMessage(string message)
+    {
+        currentMessage = message;
+        await SendMessage();
+    }
+
+    private async Task HandleKeyPress(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter" && !string.IsNullOrWhiteSpace(currentMessage) && !isLoading)
+        {
+            await SendMessage();
+        }
+    }
+
+    private async Task ScrollToBottom()
+    {
+        try
+        {
+            await JS.InvokeVoidAsync("eval", 
+                "document.querySelector('.messages-container').scrollTop = document.querySelector('.messages-container').scrollHeight");
+        }
+        catch { }
+    }
+
+    private void ClearError()
+    {
+        errorMessage = "";
+    }
+
+    private async void AutoClearError()
+    {
+        await Task.Delay(5000);
+        errorMessage = "";
+        StateHasChanged();
+    }
+
+    private record ChatMessage(string Content, bool IsUser, DateTime Timestamp);
+    private record ConversationResponse(string ConversationId);
+    private record MessageResponse(string Response);
+    private record ErrorResponse(string Error);
+    private record HistoryItem(string Id, string Content, string Role, DateTime Timestamp);
+}

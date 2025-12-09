@@ -1,0 +1,1 @@
+public record ConversationItem(string Id, string Content, string Role, DateTime Timestamp);
