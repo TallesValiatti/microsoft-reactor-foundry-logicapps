@@ -1,5 +1,4 @@
 ﻿@page "/chat"
-@using System.Net.Http.Json
 @inject HttpClient Http
 @inject IJSRuntime JS
 
@@ -16,7 +15,7 @@
         @if (isInitialized && !string.IsNullOrEmpty(conversationId))
         {
             <div class="conversation-info">
-                <small>Conversa ID: @conversationId?.Substring(0, 8)...</small>
+                <small>Conversa ID: @(conversationId?[..8])...</small>
             </div>
         }
     </div>
@@ -160,8 +159,7 @@
     .chat-container {
         display: flex;
         flex-direction: column;
-        height: 100vh;
-        height: 100dvh; /* Ajuste crucial para mobile */
+        height: 90vh;
         background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
         font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
         overflow: hidden;
@@ -376,46 +374,7 @@
         0%, 80%, 100% { transform: scale(0); }
         40% { transform: scale(1); }
     }
-
-    .suggestions-bar {
-        flex-shrink: 0;
-        padding: 0.75rem 1.5rem;
-        background: rgba(255, 255, 255, 0.95);
-        backdrop-filter: blur(10px);
-        border-top: 1px solid rgba(0,0,0,0.05);
-        margin: 0 1rem;
-        position: relative;
-        z-index: 5;
-    }
-
-    .suggestions-label {
-        font-size: 0.85rem;
-        color: #666;
-        margin-bottom: 0.5rem;
-        font-weight: 600;
-    }
-
-    .suggestions-scroll {
-        display: flex;
-        gap: 0.5rem;
-        overflow-x: auto;
-        padding-bottom: 0.5rem;
-    }
-
-    .suggestions-scroll::-webkit-scrollbar {
-        height: 4px;
-    }
-
-    .suggestions-scroll::-webkit-scrollbar-track {
-        background: #f1f1f1;
-        border-radius: 10px;
-    }
-
-    .suggestions-scroll::-webkit-scrollbar-thumb {
-        background: #667eea;
-        border-radius: 10px;
-    }
-
+    
     .suggestion-chip {
         padding: 0.5rem 1rem;
         background: white;
@@ -444,8 +403,7 @@
         backdrop-filter: blur(10px);
         border-top: 1px solid rgba(0,0,0,0.1);
         z-index: 10;
-        margin: 0 1rem 1rem 1rem;
-        border-radius: 12px;
+        margin: 0 1rem 2rem 1rem;
     }
 
     .input-wrapper {
@@ -496,7 +454,7 @@
     .btn-floating {
         position: absolute;
         top: -70px;
-        right: 0;
+        right: 15px;
         width: 50px;
         height: 50px;
         border-radius: 50%;
