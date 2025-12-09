@@ -80,7 +80,7 @@ public class AgentService
             throw new InvalidOperationException("Conversation not found");
 
         var agent = await _projectClient.Agents.GetAgentAsync(_agentName);
-
+        
         var responseClient = _projectClient.OpenAI.GetProjectResponsesClientForAgent(
             agent.Value, 
             defaultConversationId: conversationId
@@ -88,29 +88,6 @@ public class AgentService
 
         OpenAIResponse response = await responseClient.CreateResponseAsync(message);
         return response.GetOutputText();
-    }
-
-    public async Task<List<ConversationItem>> GetConversationHistory(string conversationId)
-    {
-        if (_projectClient == null)
-            throw new InvalidOperationException("Agent not initialized");
-
-        var openAiClient = _projectClient.GetProjectOpenAIClient();
-        var items = openAiClient.Conversations.GetProjectConversationItemsAsync(conversationId);
-        
-        var history = new List<ConversationItem>();
-        
-        await foreach (var item in items)
-        {
-            history.Add(new ConversationItem(
-                item.Id,
-                item.ToString() ?? "",
-                "unknown",
-                DateTime.UtcNow
-            ));
-        }
-
-        return history;
     }
 
     public async Task<List<string>> GetConnections()

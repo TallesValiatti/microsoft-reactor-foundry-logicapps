@@ -71,22 +71,6 @@ app.MapPost("/api/conversations/{conversationId}/message", async (
     })
     .WithName("SendMessage");
 
-app.MapGet("/api/conversations/{conversationId}/history", async (
-    string conversationId,
-    AgentService agentService) =>
-{
-    try
-    {
-        var history = await agentService.GetConversationHistory(conversationId);
-        return Results.Ok(history);
-    }
-    catch (Exception ex)
-    {
-        return Results.BadRequest(new { error = ex.Message });
-    }
-})
-.WithName("GetHistory");
-
 app.MapGet("/api/connections", async (AgentService agentService) =>
 {
     try
